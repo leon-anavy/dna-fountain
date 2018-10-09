@@ -4,7 +4,7 @@ License: GPLv3-or-later. See COPYING file for details.
 """
 from droplet import Droplet
 from math import ceil
-from utils import screen_repeat
+from utils import screen_repeat, screen_repeat_composite
 from lfsr import lfsr, lfsr32p, lfsr32s
 from robust_solition import PRNG
 from reedsolo import RSCodec
@@ -26,8 +26,9 @@ class DNAFountain:
                 delta = 0.5, 
                 np = False,
                 max_homopolymer = 3,
-                gc = 0.05
-                ):
+                gc = 0.05,
+                comp = None,
+                maxseed = 2**32-1):
 
         #alpha is the redundency level
         #stop is whether we have a limit on the number of oligos
@@ -49,10 +50,15 @@ class DNAFountain:
         self.final = self.calc_stop()
 
         #things related to random mnumber generator
+        #maxseed is used when we want to limit the effective used bases for the seed.
+        #This is useful when the seed is also a barcode for the composite oligo and needs to be appended with EC bases
+        self.maxseed = maxseed
         self.lfsr = lfsr(lfsr32s(), lfsr32p()) #starting an lfsr with a certain state and a polynomial for 32bits.
         self.lfsr_l = len(    '{0:b}'.format( lfsr32p() )   ) - 1 #calculate the length of lsfr in bits 
         self.seed = self.lfsr.next()
 
+        #composite DNA
+        self.comp = comp
 
         self.PRNG = PRNG(K = self.num_chunks, delta = delta, c = c_dist, np = np) #creating the solition distribution object
         self.PRNG.set_seed(self.seed)
@@ -114,6 +120,8 @@ class DNAFountain:
     def updateSeed(self):
         #This function creates a fresh seed for the droplet and primes the solition inverse cdf sampler
         self.seed = self.lfsr.next() #deploy one round of lfsr, and read the register.
+        while (self.seed > self.maxseed):
+            self.seed = self.lfsr.next()
         self.PRNG.set_seed(self.seed) #update the seed with the register
 
     def rand_chunk_nums(self):
@@ -125,11 +133,18 @@ class DNAFountain:
         return d, ix_samples #return a list of segments.
 
     def screen(self, droplet):
-
-        if screen_repeat(droplet, self.max_homopolymer, self.gc):
-        #if self.screen_obj.screen(droplet.toDNA(), self.oligo_l):
-            self.good += 1
-            return 1
+        ## LEON - generate a 14nt seed to allow RS error correction
+        if droplet.seed > self.maxseed:
+            return 0
+        if self.comp is not None:
+            if screen_repeat_composite(droplet,self.comp):
+                self.good += 1
+                return 1
+        else:
+            if screen_repeat(droplet, self.max_homopolymer, self.gc):
+            #if self.screen_obj.screen(droplet.toDNA(), self.oligo_l):
+                self.good += 1
+                return 1
         return 0
 
 

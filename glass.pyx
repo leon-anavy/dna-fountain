@@ -14,7 +14,7 @@ class Glass:
     def __init__(self, num_chunks, out, header_size = 4, 
                  rs = 0, c_dist = 0.1, delta = 0.05, 
                 flag_correct = True, gc = 0.2, max_homopolymer = 4, 
-                max_hamming = 100, decode = True, chunk_size = 32, exDNA = False, np = False, truth = None):
+                max_hamming = 100, decode = True, chunk_size = 32, exDNA = False, np = False, truth = None, comp = None):
         
         self.entries = []
         self.droplets = Set()
@@ -29,24 +29,16 @@ class Glass:
         self.done_segments = Set()
         self.truth = truth
         self.out = out
-
         self.PRNG = PRNG(K = self.num_chunks, delta = delta, c = c_dist, np = np)
-
-
-
-
         self.max_homopolymer = max_homopolymer
         self.gc = gc
         prepare(self.max_homopolymer)
         self.max_hamming = max_hamming
-
         self.rs = rs
         self.RSCodec = None
         self.correct = flag_correct
+        self.comp = comp
         self.seen_seeds = Set()
-        
-
-
         if self.rs > 0:
             self.RSCodec = RSCodec(rs)
        
@@ -55,7 +47,9 @@ class Glass:
         #header_size is in bytes
  
         #data = dna_to_byte(dna_string)
-        if self.exDNA:
+        if self.comp is not None:
+            data = comp_to_int_array(dna_string,self.comp)
+        elif self.exDNA:
             data = dexpandable_alphabet(dna_string, 
                                         len(dna_string), 
                                         n_symbols = 65,  
@@ -78,7 +72,7 @@ class Glass:
                 #we will encode the data again to evaluate the correctness of the decoding
                 data_again = list(self.RSCodec.encode(data_corrected)) #list is to convert byte array to int
 
-                if np.count_nonzero(data != list(data_again)) > self.max_hamming: #measuring hamming distance between raw input and expected raw input
+                if len([1 for d1,d2 in zip(data,data_again) if d1!=d2]) > self.max_hamming: #measuring hamming distance between raw input and expected raw input
                     #too many errors to correct in decoding                    
                     return -1, None
 
@@ -103,14 +97,12 @@ class Glass:
             #create droplet from DNA
             self.PRNG.set_seed(seed)
             blockseed, d, ix_samples = self.PRNG.get_src_blocks_wrap()
-            d = Droplet(payload, seed, ix_samples)
-            
-            #more error detection (filter DNA that does not make sense)
-            if not screen_repeat(d, self.max_homopolymer, self.gc):
-                return -1, None
+            d = Droplet(payload, seed, ix_samples, rs = self.rs, rs_obj= self.RSCodec)
 
-
-
+            if self.comp is None:
+                #more error detection (filter DNA that does not make sense)
+                if not screen_repeat(d, self.max_homopolymer, self.gc):
+                    return -1, None
             self.addDroplet(d)
             
 

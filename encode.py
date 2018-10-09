@@ -7,7 +7,7 @@ from Cython.Build import cythonize
 
 
 from fountain import DNAFountain
-from utils import screen_repeat, restricted_float, prepare
+from utils import screen_repeat, restricted_float, prepare, read_composite_alphabet, create_composite_encoder
 import argparse
 import logging
 import Colorer
@@ -37,7 +37,8 @@ def read_args():
     parser.add_argument("--alpha", help = "How many more fragments to generate on top of first k (example: 0.1 will generate 10 percent more fragments)", default = 0.07, type = float)
     parser.add_argument("--no_fasta", help = "Print oligo without a fasta header", default = False, action='store_true')
     parser.add_argument("--rand_numpy", help = "Uses numpy random generator. Faster but not compatible with older versions", default = False, action = 'store_true')
-
+    parser.add_argument("--composite_DNA", help="Composite DNA: alphabet file, barcode length (in bases) ", default=None,nargs=2, type=str)
+    parser.add_argument("--maxseed", help="Maximal values for seed - used to create shorted seed", default=2**32-1, type=int)
 
     args = parser.parse_args()
     args.orf= None
@@ -48,12 +49,20 @@ def read_args():
 
 
 def main():
-
     args = read_args()
     logging.info("Reading the file. This may take a few mintues")
     
     f_in, file_size = read_file(args.file_in, args.size)
-    
+    comp = None
+    if args.composite_DNA is not None:
+        # alphabet is a dict of int->letter including the std 0->A,1->C,2->G,3->T
+        # the composite alphabet file only contains an ordered list of the *additional* letters
+        alphabet = read_composite_alphabet(args.composite_DNA[0])
+        # TODO - set max binary block limit somehow, get oligo length from somewhere
+        composite_encoder = create_composite_encoder(alphabet,10,136)
+        BC_bases = int(args.composite_DNA[1])
+        comp = {'alphabet' : alphabet, 'BC_bases': BC_bases,'encoder':composite_encoder}
+
     f = DNAFountain(file_in = f_in, 
                     file_size = file_size, 
                     chunk_size = args.size , 
@@ -64,7 +73,9 @@ def main():
                     c_dist = args.c_dist,
                     np = args.rand_numpy,
                     alpha = args.alpha, 
-                    stop = args.stop)
+                    stop = args.stop,
+                    comp = comp,
+                    maxseed = args.maxseed)
 
     logging.info("Upper bounds on packets for decoding is %d (x%f)  with %f probability\n", int(json.loads(f.PRNG.debug())['K_prime']), 
                                                                                            json.loads(f.PRNG.debug())['Z'],
@@ -80,7 +91,6 @@ def main():
     
     used_bc = dict()
 
-    
     while f.good < f.final:
         d = f.droplet()
 
@@ -88,8 +98,7 @@ def main():
         if f.screen(d):
             if not args.no_fasta:
                 out.write(">packet {}_{}\n".format(f.good, d.degree))
-            out.write("{}\n".format(d.to_human_readable_DNA()))
-
+            out.write("{}\n".format(d.to_human_readable_DNA(comp = f.comp)))
             if d.seed in used_bc:
                 logging.error("Seed %d has been seen before\nDone", d.seed)
                 sys.exit(1)

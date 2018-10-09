@@ -2,7 +2,7 @@
 Copyright (C) 2016 Yaniv Erlich
 License: GPLv3-or-later. See COPYING file for details.
 """
-from utils import int_to_four, four_to_dna
+from utils import int_to_four, four_to_dna, int_array_to_bin
 import random
 import struct
 import numpy as np
@@ -25,18 +25,35 @@ class Droplet:
     def chunkNums(self):
         return self.num_chunks
 
-    def toDNA(self, flag = None):
+    def toDNA(self, comp = None):
         #this function wraps the seed, data payload, and Reed Solomon.
 
-        if self.DNA is not None:
-            return self.DNA
-        
-        self.DNA = int_to_four(self._package())
+        #if self.DNA is not None:
+        #   return self.DNA
+
+        if comp is not None:
+            BC_bytes = comp['BC_bases'] / 4
+            package = self._package()
+            std_DNA = int_to_four(package[:BC_bytes])
+            comp_encoder = comp['encoder']
+            comp_package = package[BC_bytes:]
+            comp_bin = int_array_to_bin(comp_package)
+            bin_block_size = len(comp_encoder.keys()[0])
+            comp_DNA = [comp_encoder[comp_bin[i:i+bin_block_size]] for i in range(0,len(comp_bin),bin_block_size)]
+            comp_DNA = ''.join(str(vv) for v in comp_DNA for vv in v)
+            self.DNA = std_DNA + comp_DNA
+        else:
+            self.DNA = int_to_four(self._package())
         return self.DNA
 
 
-    def to_human_readable_DNA(self):
-        #converts the DNA into a human readable [A,C,G,T
+    def to_human_readable_DNA(self, comp = None):
+        if comp is not None:
+            # converts the DNA into a human readable composite letters
+            alphabet = comp['alphabet']
+            dna = ''.join(alphabet[int(i)] for i in self.toDNA(comp))
+            return dna
+        #converts the DNA into a human readable [A,C,G,T]
         return four_to_dna(self.toDNA())
         
     def _package(self):

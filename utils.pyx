@@ -8,6 +8,7 @@ import random
 import os
 import numpy as np
 import argparse
+import math, itertools
 
 intab = "0123"
 outtab = "ACGT"
@@ -69,6 +70,8 @@ def byte_to_int_array(s):
         a.append(ord(s[t]))
     return a
 
+def int_array_to_bin(s):
+    return ''.join('{0:08b}'.format(element) for element in s) #convert to a long sring of binary values
 
 def int_to_dna(a):
     #a is an array of integers between 0-255.
@@ -87,7 +90,6 @@ def int_to_four(a):
 def four_to_dna(s):
     return s.translate(trantab)
 
-
 def dna_to_byte(dna_str):
     #convert a string like ACTCA to a string of bytes like \x01 \x02
     num = dna_str.translate(revtab)
@@ -102,6 +104,26 @@ def dna_to_int_array(dna_str):
     s = ''.join('{0:02b}'.format(int(num[t])) for t in xrange(0, len(num),1))
     data = [int(s[t:t+8],2) for t in xrange(0,len(s), 8)]
 
+    return data
+
+def comp_to_int_array(dna_str,comp):
+    if dna_str is None:
+        return  None
+    #convert a composite dna word to an array of ints like [10, 2, 4]
+    alphabet = comp['alphabet']
+    rev_alphabet = {v:k for k,v in alphabet.iteritems()}
+    comp_encoder = comp['encoder']
+    BC_bases = comp['BC_bases']
+    std_DNA = dna_str[:BC_bases]
+    comp_DNA = dna_str[BC_bases:]
+    std_int_ar = dna_to_int_array(std_DNA)
+    comp_block_size = len(comp_encoder.values()[0])
+    comp_encoder_rev = {v:k for k,v in comp_encoder.iteritems()}
+    comp_DNA_ints = [rev_alphabet[l] for l in comp_DNA]
+    comp_bin = ''.join(comp_encoder_rev[tuple(comp_DNA_ints[i:i + comp_block_size])] for i in range(0, len(comp_DNA_ints), comp_block_size))
+    bytes = [byte_from_bin(comp_bin[i:i + 8]) for i in range(0, len(comp_bin), 8)]
+    comp_int_ar = byte_to_int_array(bytes)
+    data = std_int_ar + comp_int_ar
     return data
 
 
@@ -127,12 +149,19 @@ def prepare(max_repeat):
     Gs = '2' * (max_repeat+1)
     Ts = '3' * (max_repeat+1)
 
+def screen_repeat_composite(drop,comp):
+    # This is "fake" translation to DNA only to get the BC
+    dna = drop.toDNA(comp=None)
+    bc = dna[0:comp['BC_bases']]
+    if not screen_repeat_dna(bc,4,0.2):
+        return 0
+    return 1
+
 def screen_repeat(drop, max_repeat, gc_dev):
 
     dna = drop.toDNA()
     return screen_repeat_dna(dna, max_repeat, gc_dev)
     
-
 def screen_repeat_dna(dna, max_repeat, gc_dev):
     
     if As in dna or Cs in dna or Gs in dna or Ts in dna: 
@@ -161,6 +190,39 @@ def restricted_float(x):
         raise argparse.ArgumentTypeError("%r not in range [0.0, 1.0]"%(x,))
     return x
 
+def read_composite_alphabet(alphabet_file):
+    alphabet = {i:l for i,l in zip(range(4),'ACGT')}
+    with open(alphabet_file) as inf:
+        for idx, l in enumerate(inf):
+            alphabet[idx+4] = l.rstrip()
+    return alphabet
+
+def create_composite_encoder(alphabet,max_block,oligo_len):
+    alphabet_size = len(alphabet)
+    get_bin = lambda x, n: format(x, 'b').zfill(n)
+    # calcualte best bloxk sizes
+    best_binary_b = 0
+    best_output_b = 0
+    best_encoded_bits = 0
+    for binary_b in range(1, max_block):
+        binary_words = 2 ** binary_b
+        output_b = int(math.ceil(math.log(binary_words, alphabet_size)))
+        output_blocks = int(math.floor(oligo_len / output_b))
+        encoded_bits = output_blocks * binary_b
+        if encoded_bits > best_encoded_bits:
+            best_binary_b = binary_b
+            best_output_b = output_b
+            best_encoded_bits = encoded_bits
+
+    binary_block_size = best_binary_b
+    output_block_size = best_output_b
+    if output_block_size > 1:
+        output_blocks = list(itertools.product(alphabet.keys(), repeat=output_block_size))
+    else:
+        output_blocks = alphabet.keys()
+    encoding_dict = {get_bin(v, binary_block_size): output_blocks[v] for v in
+                          range(2 ** binary_block_size)}
+    return encoding_dict
 
 
 
