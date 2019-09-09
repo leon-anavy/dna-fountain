@@ -11,7 +11,7 @@ import re
 import json
 from glass import Glass
 from collections import defaultdict
-from utils import dna_to_byte, split_header, comp_to_int_array, read_composite_alphabet, create_composite_encoder
+from utils import dna_to_byte, split_header, comp_to_int_array, read_composite_alphabet, create_composite_encoder, create_optimal_composite_encoder
 import md5
 from preprocessing import read_file
 from aggressive import Aggressive
@@ -57,6 +57,9 @@ def read_args():
                         default=None, type=int)
     parser.add_argument("--composite_DNA", help="Composite DNA: alphabet file, barcode length (in bases) ",
                         default=None, nargs=2, type=str)
+    parser.add_argument("--composite_encoder",
+                        help="Composite DNA encoder: binary block size, output block size",
+                        default=None, nargs=2, type=str)
     args = parser.parse_args()
 
     return (args)
@@ -88,9 +91,12 @@ def main():
         # alphabet is a dict of int->letter including the std 0->A,1->C,2->G,3->T
         # the composite alphabet file only contains an ordered list of the *additional* letters
         alphabet = read_composite_alphabet(args.composite_DNA[0])
-        # TODO - set max binary block limit somehow, get oligo length from somewhere
-        composite_encoder = create_composite_encoder(alphabet,10,136)
         BC_bases = int(args.composite_DNA[1])
+        # TODO - set max binary block limit somehow, get oligo length from somewhere
+        if args.composite_encoder is not None:
+            composite_encoder = create_composite_encoder(alphabet, int(args.composite_encoder[0]), int(args.composite_encoder[1]))
+        else:
+            composite_encoder = create_optimal_composite_encoder(alphabet, 10, 136)
         comp = {'alphabet' : alphabet, 'BC_bases': BC_bases,'encoder':composite_encoder}
 
     truth = None
@@ -182,7 +188,7 @@ def main():
             else:
                 seen_seeds[seed] += 1
 
-        if line % 1000 == 0:
+        if line % 10000 == 0:
             logging.info("After reading %d lines, %d chunks are done. So far: %d rejections (%f) %d barcodes", line,
                          g.chunksDone(), errors, errors / (line + 0.0), g.len_seen_seed())
             pass

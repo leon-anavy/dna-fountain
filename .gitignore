@@ -11,3 +11,5 @@ utils.c
 
 build/
 
+*.xml
+.idea/dna-fountain-clean.iml

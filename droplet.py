@@ -35,12 +35,18 @@ class Droplet:
             BC_bytes = comp['BC_bases'] / 4
             package = self._package()
             std_DNA = int_to_four(package[:BC_bytes])
-            comp_encoder = comp['encoder']
+            std_DNA = [int(i) for i in std_DNA]
+            bin_block_size,output_block_size,comp_encoder,_ = comp['encoder']
             comp_package = package[BC_bytes:]
             comp_bin = int_array_to_bin(comp_package)
-            bin_block_size = len(comp_encoder.keys()[0])
-            comp_DNA = [comp_encoder[comp_bin[i:i+bin_block_size]] for i in range(0,len(comp_bin),bin_block_size)]
-            comp_DNA = ''.join(str(vv) for v in comp_DNA for vv in v)
+            output_block_single = output_block_size == 1
+            comp_DNA = [comp_encoder(comp_bin[i:i + bin_block_size]) for i in range(0, len(comp_bin), bin_block_size)]
+            if not output_block_single:
+                comp_DNA = [ll for l in comp_DNA for ll in l]
+            # if output_block_single:
+            #     comp_DNA = ','.join(str(v) for v in comp_DNA)
+            # else:
+            #     comp_DNA = ','.join(str(vv) for v in comp_DNA for vv in v)
             self.DNA = std_DNA + comp_DNA
         else:
             self.DNA = int_to_four(self._package())
@@ -51,7 +57,8 @@ class Droplet:
         if comp is not None:
             # converts the DNA into a human readable composite letters
             alphabet = comp['alphabet']
-            dna = ''.join(alphabet[int(i)] for i in self.toDNA(comp))
+            dna = self.toDNA(comp)
+            dna = ','.join(alphabet[int(i)] for i in dna)
             return dna
         #converts the DNA into a human readable [A,C,G,T]
         return four_to_dna(self.toDNA())

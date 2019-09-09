@@ -109,18 +109,17 @@ def dna_to_int_array(dna_str):
 def comp_to_int_array(dna_str,comp):
     if dna_str is None:
         return  None
+    dna_str = dna_str.split(',')
     #convert a composite dna word to an array of ints like [10, 2, 4]
     alphabet = comp['alphabet']
     rev_alphabet = {v:k for k,v in alphabet.iteritems()}
-    comp_encoder = comp['encoder']
+    bin_block_size, comp_block_size, _, comp_decoder = comp['encoder']
     BC_bases = comp['BC_bases']
-    std_DNA = dna_str[:BC_bases]
+    std_DNA = ''.join(dna_str[:BC_bases])
     comp_DNA = dna_str[BC_bases:]
     std_int_ar = dna_to_int_array(std_DNA)
-    comp_block_size = len(comp_encoder.values()[0])
-    comp_encoder_rev = {v:k for k,v in comp_encoder.iteritems()}
     comp_DNA_ints = [rev_alphabet[l] for l in comp_DNA]
-    comp_bin = ''.join(comp_encoder_rev[tuple(comp_DNA_ints[i:i + comp_block_size])] for i in range(0, len(comp_DNA_ints), comp_block_size))
+    comp_bin = ''.join(comp_decoder(tuple(comp_DNA_ints[i:i + comp_block_size])) for i in range(0, len(comp_DNA_ints), comp_block_size))
     bytes = [byte_from_bin(comp_bin[i:i + 8]) for i in range(0, len(comp_bin), 8)]
     comp_int_ar = byte_to_int_array(bytes)
     data = std_int_ar + comp_int_ar
@@ -190,6 +189,7 @@ def restricted_float(x):
         raise argparse.ArgumentTypeError("%r not in range [0.0, 1.0]"%(x,))
     return x
 
+# a composite alphabet is a dictionary mapping indices from range(size_of_alphabet) to given characters
 def read_composite_alphabet(alphabet_file):
     alphabet = {i:l for i,l in zip(range(4),'ACGT')}
     with open(alphabet_file) as inf:
@@ -197,9 +197,44 @@ def read_composite_alphabet(alphabet_file):
             alphabet[idx+4] = l.rstrip()
     return alphabet
 
-def create_composite_encoder(alphabet,max_block,oligo_len):
+def create_composite_encoder(alphabet,binary_block_size, output_block_size):
+    def encoder(x):
+        if output_block_size == 1:
+            return alphabet.keys()[int(x,2)]
+        else:
+            n = len(alphabet.keys())
+            xx = int(x,2)
+            res = []
+            while xx >= n:
+                res.append(xx % n)
+                xx = xx // n
+            res.append(xx)
+            ss = [alphabet.keys()[0] for _ in range(output_block_size)]
+            for idx, p in enumerate(res):
+                ss[-idx - 1] = alphabet.keys()[p]
+            return ss
+    def decoder(c):
+        if output_block_size == 1:
+            return format(alphabet.keys().index(c[0]),'b').zfill(binary_block_size)
+        else:
+            n = len(alphabet.keys())
+            x = 0
+            for idx,cc in enumerate(c):
+                vv = alphabet.keys().index(cc)
+                x += vv*(n**(output_block_size-idx-1))
+            return format(x, 'b').zfill(binary_block_size)
+    return (binary_block_size,output_block_size,encoder,decoder)
+    # if output_block_size > 1:
+    #     output_blocks = list(itertools.product(alphabet.keys(), repeat=output_block_size))
+    # else:
+    #     output_blocks = alphabet.keys()
+    # encoding_dict = {get_bin(v, binary_block_size): output_blocks[v] for v in
+    #                  range(2 ** binary_block_size)}
+    # return encoding_dict
+
+
+def create_optimal_composite_encoder(alphabet,max_block,oligo_len):
     alphabet_size = len(alphabet)
-    get_bin = lambda x, n: format(x, 'b').zfill(n)
     # calcualte best bloxk sizes
     best_binary_b = 0
     best_output_b = 0
@@ -216,15 +251,4 @@ def create_composite_encoder(alphabet,max_block,oligo_len):
 
     binary_block_size = best_binary_b
     output_block_size = best_output_b
-    if output_block_size > 1:
-        output_blocks = list(itertools.product(alphabet.keys(), repeat=output_block_size))
-    else:
-        output_blocks = alphabet.keys()
-    encoding_dict = {get_bin(v, binary_block_size): output_blocks[v] for v in
-                          range(2 ** binary_block_size)}
-    return encoding_dict
-
-
-
-
-
+    return create_composite_encoder(alphabet,binary_block_size,output_block_size)

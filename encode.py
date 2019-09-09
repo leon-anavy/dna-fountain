@@ -7,7 +7,7 @@ from Cython.Build import cythonize
 
 
 from fountain import DNAFountain
-from utils import screen_repeat, restricted_float, prepare, read_composite_alphabet, create_composite_encoder
+from utils import screen_repeat, restricted_float, prepare, read_composite_alphabet, create_composite_encoder, create_optimal_composite_encoder
 import argparse
 import logging
 import Colorer
@@ -37,7 +37,12 @@ def read_args():
     parser.add_argument("--alpha", help = "How many more fragments to generate on top of first k (example: 0.1 will generate 10 percent more fragments)", default = 0.07, type = float)
     parser.add_argument("--no_fasta", help = "Print oligo without a fasta header", default = False, action='store_true')
     parser.add_argument("--rand_numpy", help = "Uses numpy random generator. Faster but not compatible with older versions", default = False, action = 'store_true')
-    parser.add_argument("--composite_DNA", help="Composite DNA: alphabet file, barcode length (in bases) ", default=None,nargs=2, type=str)
+    parser.add_argument("--composite_DNA",
+                        help="Composite DNA: alphabet file, barcode length (in bases)",
+                        default=None, nargs=2, type=str)
+    parser.add_argument("--composite_encoder",
+                        help="Composite DNA encoder: binary block size, output block size",
+                        default=None, nargs=2, type=str)
     parser.add_argument("--maxseed", help="Maximal values for seed - used to create shorted seed", default=2**32-1, type=int)
 
     args = parser.parse_args()
@@ -58,9 +63,12 @@ def main():
         # alphabet is a dict of int->letter including the std 0->A,1->C,2->G,3->T
         # the composite alphabet file only contains an ordered list of the *additional* letters
         alphabet = read_composite_alphabet(args.composite_DNA[0])
-        # TODO - set max binary block limit somehow, get oligo length from somewhere
-        composite_encoder = create_composite_encoder(alphabet,10,136)
         BC_bases = int(args.composite_DNA[1])
+        # TODO - set max binary block limit somehow, get oligo length from somewhere
+        if args.composite_encoder is not None:
+            composite_encoder = create_composite_encoder(alphabet, int(args.composite_encoder[0]), int(args.composite_encoder[1]))
+        else:
+            composite_encoder = create_optimal_composite_encoder(alphabet, 10, 136)
         comp = {'alphabet' : alphabet, 'BC_bases': BC_bases,'encoder':composite_encoder}
 
     f = DNAFountain(file_in = f_in, 
