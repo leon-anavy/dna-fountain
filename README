@@ -13,3 +13,16 @@ Visit http://dnafountain.teamerlich.org/ for more information.
 Contact: yaniv@cs.columbia.edu
 
 License: GPLv3 (or later)
+
+
+Support for composite DNA
+=========================
+
+The added code is described in the following manuscript:
+
+    Improved DNA based storage capacity and fidelity using composite DNA letters
+    Leon Anavy, Inbal Vaknin, Orna Atar,  Roee Amit,  Zohar Yakhini
+    doi: https://doi.org/10.1101/433524
+    BioRxiv: https://www.biorxiv.org/content/early/2018/10/02/433524
+
+Contact: anavy@technion.ac.il
